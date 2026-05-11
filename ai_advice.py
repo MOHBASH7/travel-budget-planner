@@ -1,30 +1,27 @@
-from google import genai
+import google.generativeai as genai
 
-client = genai.Client(api_key="AIzaSyBgJPwFvigrnLzis2qLFGQ--XWObqG9ON0")
+# Replace with your actual Gemini API Key
+API_KEY = "AIzaSyCtzO-V4UGFO24N0-waW88mB_vsnswnSdY"
+genai.configure(api_key=API_KEY)
 
-def generate_advice(destination, budget, days):
+class AIAdvisor:
+    def __init__(self):
+        # Using 1.5-flash as it often has more stable quota for free tier
+        self.model = genai.GenerativeModel('gemini-1.5-flash')
 
-    try:
-        prompt = f"""
-        You are a travel assistant.
-
-        Destination: {destination}
-        Budget: {budget}
-        Days: {days}
-
-        Give:
-        - daily spending plan
-        - saving tips
-        - transport advice
-        - food suggestions
-        """
-
-        response = client.models.generate_content(
-            model="gemini-pro-2.0-flash",
-            contents=prompt
-        )
-
-        return response.text
-
-    except Exception as e:
-        return f"AI Error: {e}"
+    def generate_advice(self, destination, budget, days, currency):
+        if not destination or budget <= 0:
+            return "Missing destination or budget."
+        
+        try:
+            prompt = (
+                f"Give a short travel budget plan for {days} days in {destination}. "
+                f"Total budget: {budget:.2f} {currency}."
+            )
+            response = self.model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            # Friendly handling of the 429 "Quota" error
+            if "429" in str(e):
+                return "⚠️ The AI is on a break! You've hit the free limit. Please wait 60 seconds and try again."
+            return f"AI Error: {str(e)}"
