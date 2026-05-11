@@ -2,53 +2,93 @@ import streamlit as st
 import requests
 import re
 import json
+import pandas as pd
 from ai_advice import AIAdvisor
 
-# 1. OOP Requirement: Initialize the AI class
+# ---------------- CONFIG & OOP ----------------
+st.set_page_config(page_title="Travel Budget Planner", layout="wide")
 advisor = AIAdvisor()
 
-st.title("✈️ Simple Travel Planner")
+class Validator:
+    """Using Regular Expressions to validate inputs"""
+    @staticmethod
+    def is_valid_currency(code):
+        # Regex: Exactly 3 uppercase letters
+        return bool(re.fullmatch(r"^[A-Z]{3}$", code.upper()))
 
-# --- INPUT SECTION ---
-# We use simple inputs so you can easily point to them during defense
-home_curr = st.text_input("Home Currency (e.g. NGN)", "NGN")
-dest_curr = st.text_input("Destination Currency (e.g. USD)", "USD")
-destination = st.text_input("Destination Name")
-amount = st.number_input("Budget Amount", min_value=0.0)
-days = st.number_input("Days", min_value=1)
+# ---------------- UI ----------------
+st.title("🌍 Travel Budget Planner")
 
-# --- MAIN LOGIC ---
-if st.button("Calculate & Get AI Advice"):
-    
-    # 2. REGEX Requirement: Validate currency is exactly 3 letters
-    if not re.fullmatch(r"^[A-Z]{3}$", home_curr.upper()):
-        st.error("Invalid Home Currency format!")
-    
+# Sidebar for Exports (File Handling Requirement)
+with st.sidebar:
+    st.header("💾 Export Data")
+    if st.button("Export Budget to JSON"):
+        data = {"expenses": st.session_state.get("expenses", []), "total": sum(e['cost'] for e in st.session_state.get("expenses", []))}
+        with open("budget_report.json", "w") as f:
+            json.dump(data, f)
+        st.success("Saved to budget_report.json")
+
+# ---------------- INPUTS ----------------
+col1, col2, col3 = st.columns(3)
+with col1:
+    home_curr = st.text_input("Home Currency", "NGN").upper()
+    dest_curr = st.text_input("Destination Currency", "USD").upper()
+with col2:
+    dest_name = st.text_input("Destination City/Country")
+    total_amount = st.number_input("Total Amount to Convert", min_value=0.0)
+with col3:
+    trip_days = st.number_input("Duration (Days)", min_value=1)
+
+# ---------------- LOGIC ----------------
+if st.button("🚀 Calculate & Get AI Advice"):
+    # 1. Validation (Regex & Exception Handling)
+    if not Validator.is_valid_currency(home_curr) or not Validator.is_valid_currency(dest_curr):
+        st.error("Invalid Currency Code! Please use 3 letters (e.g., USD).")
     else:
         try:
-            # 3. EXCEPTION HANDLING: Try to get exchange rates
+            # 2. API Call (Currency)
             url = f"https://open.er-api.com/v6/latest/{home_curr}"
-            data = requests.get(url).json()
+            response = requests.get(url)
+            response.raise_for_status() # Check for bad request
+            data = response.json()
             
-            rate = data["rates"][dest_curr.upper()]
-            converted = amount * rate
-            
-            # Show basic results
-            st.write(f"### Total Budget: {converted:.2f} {dest_curr}")
-            
-            # 4. AI Requirement: Call the AI Advisor class
-            with st.spinner("AI is thinking..."):
-                advice = advisor.generate_advice(destination, converted, days, dest_curr)
-                st.info(advice)
-                
-        except Exception as e:
-            st.error("Could not fetch data. Check your connection or currency codes.")
+            if dest_curr not in data["rates"]:
+                raise ValueError("Destination currency not found in exchange data.")
 
-# --- FILE HANDLING SECTION ---
-st.header("💾 Save Data")
-if st.button("Export to JSON"):
-    # 5. FILE HANDLING Requirement: Save a local file
-    sample_data = {"dest": destination, "budget": amount}
-    with open("budget.json", "w") as f:
-        json.dump(sample_data, f)
-    st.success("Saved to budget.json!")
+            rate = data["rates"][dest_curr]
+            converted_total = total_amount * rate
+            daily = converted_total / trip_days
+
+            # 3. Display Results
+            st.divider()
+            c1, c2 = st.columns(2)
+            c1.metric(f"Total in {dest_curr}", f"{converted_total:,.2f}")
+            c2.metric("Daily Limit", f"{daily:,.2f}")
+
+            # 4. AI Advice
+            with st.spinner("AI is thinking..."):
+                advice = advisor.generate_advice(dest_name, converted_total, trip_days, dest_curr)
+                st.info(advice)
+
+        except Exception as e:
+            st.error(f"Error: {e}")
+
+# ---------------- EXPENSE TRACKER ----------------
+st.divider()
+st.header("💸 Expense Tracker")
+if "expenses" not in st.session_state: st.session_state.expenses = []
+
+ec1, ec2 = st.columns([2, 1])
+with ec1:
+    item = st.text_input("What did you buy?")
+with ec2:
+    cost = st.number_input("Cost", min_value=0.0, key="exp_cost")
+
+if st.button("Add Expense"):
+    if item:
+        st.session_state.expenses.append({"item": item, "cost": cost})
+
+if st.session_state.expenses:
+    df = pd.DataFrame(st.session_state.expenses)
+    st.table(df)
+    st.write(f"**Total Spent:** {df['cost'].sum():,.2f}")
