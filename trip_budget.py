@@ -1,98 +1,113 @@
 import json
-from datetime import datetime
 import requests
-import streamlit as st
-import os
-
-DATA_FILE = "budget_history.json"
-
-def load_data():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as file:
-            return json.load(file)
-    return []
-
-def save_data(new_entry):
-    data = load_data()
-    data.append(new_entry)
-    with open(DATA_FILE, "w") as file:
-        json.dump(data, file, indent=4)
-
-
-st.title("Trip Budget Planner")
-st.write("Hello! If you see this, the integration is working.")
-if st.button("Clear History"):
-    if os.path.exists("budget_history.json"):
-        os.remove("budget_history.json")
-
-
-budget = st.number_input("Enter your total budget (₦)", min_value=0.0)
-expense_name = st.text_input("Expense Name (e.g., Hotel, Food)")
-amount = st.number_input("Amount", min_value=0.0)
-
-st.sidebar.header("Settings")
-target_currency = st.sidebar.selectbox("Convert to:", ["USD", "EUR", "GBP"])
-
-
-# Load previous history
-history = load_data()
-
-st.title("Currency Converter & Tracker")
-
-# User inputs
-amount = st.number_input("Amount (₦)", min_value=0.0)
-target = st.selectbox("Convert to", ["USD", "EUR", "GBP"])
-
-if st.button("Convert and Save"):
-    # Imagine 'converted_val' comes from your API logic
-    converted_val = amount * 0.00065 # Example rate
-    
-    entry = {
-        "original_naira": amount,
-        "converted_val": converted_val,
-        "currency": target
-    }
-    
-    save_data(entry)
-    st.success(f"Saved! {amount} ₦ is approx {converted_val:.2f} {target}")
-
-# Display history
-if history:
-    st.subheader("Recent Conversions")
-    st.table(history)
+from datetime import datetime, date, timedelta
 
 class TripBudget:
-    def __init__(self, destination, duration_days, total_budget, currency):
-        self.destination = destination
-        self.duration_days = duration_days
-        self.total_budget = total_budget
-        self.currency = currency
+    HOLIDAY_API_URL = "https://date.nager.at/api/v3/PublicHolidays/{year}/{country_code}"
+
+    def __init__(
+        self,
+        destination,
+        duration_days,
+        total_budget,
+        currency,
+        start_date=None,
+        end_date=None,
+        country_code=None,
+    ):
+        self.destination = str(destination).strip()
+        self.duration_days = int(duration_days)
+        self.total_budget = float(total_budget)
+        self.currency = str(currency).strip().upper()
+        self.start_date = self._parse_date(start_date)
+        self.end_date = self._parse_date(end_date)
+        self.country_code = str(country_code).strip().upper() if country_code else None
+
+        if self.start_date and self.end_date and self.start_date > self.end_date:
+            raise ValueError("Start date must be before or equal to end date.")
+
+    def _parse_date(self, value):
+        if value is None:
+            return None
+        if isinstance(value, date):
+            return value
+        if isinstance(value, str) and value:
+            return datetime.strptime(value, "%Y-%m-%d").date()
+        raise ValueError("Date must be a datetime.date or YYYY-MM-DD string.")
 
     def daily_limit(self):
         if self.duration_days <= 0:
             return 0
         return round(self.total_budget / self.duration_days, 2)
 
-    def save_to_file(self, filename):
-        data = {
+    def total_days(self):
+        if self.start_date and self.end_date:
+            return (self.end_date - self.start_date).days + 1
+        return self.duration_days
+
+    def to_dict(self):
+        return {
             "destination": self.destination,
             "duration_days": self.duration_days,
             "total_budget": self.total_budget,
-            "currency": self.currency
+            "currency": self.currency,
+            "start_date": self.start_date.isoformat() if self.start_date else None,
+            "end_date": self.end_date.isoformat() if self.end_date else None,
+            "country_code": self.country_code,
         }
-        try:
-            with open(filename, "w") as file:
-                json.dump(data, file, indent=4)
-            print(f"Data saved to {filename}")
-        except IOError as e:
-            print(f"File Error: {e}")
 
-    def check_public_holidays(self, country_code, year):
-        url = f"https://date.nager.at/api/v3/PublicHolidays/{year}/{country_code}"
-        try:
-            response = requests.get(url)
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            print(f"Error fetching holidays: {e}")
+    def save_to_file(self, filename):
+        with open(filename, "w", encoding="utf-8") as file:
+            json.dump(self.to_dict(), file, indent=4)
+        return filename
+
+    def compare_with(self, other):
+        if not isinstance(other, TripBudget):
+            raise TypeError("Can only compare TripBudget instances.")
+
+        difference = round(self.total_budget - other.total_budget, 2)
+        return {
+            "first_destination": self.destination,
+            "second_destination": other.destination,
+            "difference": abs(difference),
+            "higher_budget": self.destination if difference > 0 else other.destination if difference < 0 else "equal",
+        }
+
+    def _fetch_holidays_for_year(self, year):
+        if not self.country_code:
             return []
+
+        url = self.HOLIDAY_API_URL.format(year=year, country_code=self.country_code)
+        try:
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            if isinstance(data, list):
+                return data
+        except requests.RequestException:
+            pass
+        return []
+
+    def holidays_in_range(self):
+        if not self.country_code or not self.start_date or not self.end_date:
+            return []
+
+        holidays = []
+        year = self.start_date.year
+        while year <= self.end_date.year:
+            for entry in self._fetch_holidays_for_year(year):
+                try:
+                    holiday_date = datetime.fromisoformat(entry.get("date")).date()
+                except (TypeError, ValueError):
+                    continue
+                if self.start_date <= holiday_date <= self.end_date:
+                    holidays.append(
+                        {
+                            "date": entry.get("date"),
+                            "localName": entry.get("localName"),
+                            "name": entry.get("name"),
+                        }
+                    )
+            year += 1
+
+        return holidays

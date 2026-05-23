@@ -1,0 +1,18 @@
+[
+    {
+        "date": "2026-05-23T10:17:07.206327",
+        "from_currency": "NGN",
+        "to_currency": "EUR",
+        "amount": 100.0,
+        "converted_amount": 0.0634,
+        "exchange_rate": 0.000634
+    },
+    {
+        "date": "2026-05-23T10:17:08.198018",
+        "from_currency": "NGN",
+        "to_currency": "GBP",
+        "amount": 100.0,
+        "converted_amount": 0.0548,
+        "exchange_rate": 0.000548
+    }
+]

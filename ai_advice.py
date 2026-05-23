@@ -1,27 +1,53 @@
-import google.generativeai as genai
+import os
+import random
 
-# Replace with your actual Gemini API Key
-API_KEY = "AIzaSyCtzO-V4UGFO24N0-waW88mB_vsnswnSdY"
-genai.configure(api_key=API_KEY)
+try:
+    import google.generativeai as genai
+    HAVE_AI = True
+except ImportError:
+    HAVE_AI = False
+
+API_KEY = os.getenv("GOOGLE_API_KEY", "AIzaSyCtzO-V4UGFO24N0-waW88mB_vsnswnSdY")
+
+if HAVE_AI:
+    try:
+        genai.configure(api_key=API_KEY)
+    except Exception:
+        HAVE_AI = False
 
 class AIAdvisor:
-    def __init__(self):
-        # Using 1.5-flash as it often has more stable quota for free tier
-        self.model = genai.GenerativeModel('gemini-1.5-flash')
+    def __init__(self, model_name="gemini-1.5-flash"):
+        self.model_name = model_name
+        self.use_ai = HAVE_AI
 
     def generate_advice(self, destination, budget, days, currency):
-        if not destination or budget <= 0:
-            return "Missing destination or budget."
-        
-        try:
-            prompt = (
-                f"Give a short travel budget plan for {days} days in {destination}. "
-                f"Total budget: {budget:.2f} {currency}."
-            )
-            response = self.model.generate_content(prompt)
-            return response.text
-        except Exception as e:
-            # Friendly handling of the 429 "Quota" error
-            if "429" in str(e):
-                return "⚠️ The AI is on a break! You've hit the free limit. Please wait 60 seconds and try again."
-            return f"AI Error: {str(e)}"
+        if not destination or budget <= 0 or days <= 0:
+            return "Provide a destination, budget, and duration to generate advice."
+
+        prompt = (
+            f"Give a short travel budget plan for {days} days in {destination}. "
+            f"Total budget: {budget:.2f} {currency}."
+        )
+
+        if self.use_ai:
+            try:
+                model = genai.GenerativeModel(self.model_name)
+                response = model.generate_content(prompt)
+                return response.text
+            except Exception:
+                return self._fallback_advice(destination, budget, days, currency)
+
+        return self._fallback_advice(destination, budget, days, currency)
+
+    def _fallback_advice(self, destination, budget, days, currency):
+        daily = budget / days if days else 0
+        suggestions = [
+            "Balance your spend by saving on accommodation and using local transport.",
+            "Set a daily amount for food, sightseeing, and small emergencies.",
+            "Divide the budget into essentials, experiences, and a safety buffer.",
+        ]
+        card = random.choice(suggestions)
+        return (
+            f"Travel advice for {destination}: With {budget:.2f} {currency} over {days} days, aim for about {daily:.2f} {currency} per day. "
+            f"{card}"
+        )
