@@ -120,11 +120,13 @@ if st.button("🚀 Calculate Travel Budget"):
             st.info(advice)
 
     except ValueError as exc:
-        st.error(f"Input error: {exc}")
+        st.error(f"Input or exchange API error: {exc}")
+    except ConnectionError as exc:
+        st.error(f"Currency API connection error: {exc}")
     except requests.RequestException as exc:
         st.error(f"Network error: {exc}")
     except Exception as exc:
-        st.error(f"Error: {exc}")
+        st.error(f"Unexpected error: {exc}")
 
 # Destination comparison
 st.write("---")

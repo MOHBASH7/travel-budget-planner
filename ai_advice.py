@@ -7,13 +7,15 @@ try:
 except ImportError:
     HAVE_AI = False
 
-API_KEY = os.getenv("GOOGLE_API_KEY", "AIzaSyCtzO-V4UGFO24N0-waW88mB_vsnswnSdY")
+API_KEY = os.getenv("GOOGLE_API_KEY")
 
-if HAVE_AI:
+if HAVE_AI and API_KEY:
     try:
         genai.configure(api_key=API_KEY)
     except Exception:
         HAVE_AI = False
+else:
+    HAVE_AI = False
 
 class AIAdvisor:
     def __init__(self, model_name="gemini-1.5-flash"):

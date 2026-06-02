@@ -14,5 +14,21 @@
         "amount": 100.0,
         "converted_amount": 0.0548,
         "exchange_rate": 0.000548
+    },
+    {
+        "date": "2026-06-02T15:32:00.506513",
+        "from_currency": "EUR",
+        "to_currency": "GBP",
+        "amount": 1000.0,
+        "converted_amount": 864.8000000000001,
+        "exchange_rate": 0.8648
+    },
+    {
+        "date": "2026-06-02T15:35:33.244717",
+        "from_currency": "EUR",
+        "to_currency": "GBP",
+        "amount": 90210.0,
+        "converted_amount": 78013.60800000001,
+        "exchange_rate": 0.8648
     }
 ]
